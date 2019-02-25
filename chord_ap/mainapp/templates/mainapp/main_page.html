@@ -1,0 +1,28 @@
+{% extends "mainapp/base.html" %}
+
+{% block title %}Chord_wiki{% endblock title %}
+
+{% block content %}
+    <h4 class="mt-4 border-bottom">コード入力</h4>
+    <form action="" method="get">
+    <div>ここにコードを入力してね！！
+      <input type="text" placeholder="(ex.)CM7,D,Gm" value="" name="chord"><button type="submit">enter</button>
+    </div>
+    <div>
+      input code: {{input_chord}}
+    </div>
+    <div>
+    suggested code: 
+    <table>
+      <tr><th>match_chord</th><th>suggest_chord</th><th>title</th><th>position</th></tr>
+      {% for match_chord, suggest_chord, eval_value, title, sub_title, link, position in output_chord %}
+      <tr><td>{{ match_chord }}</td><td>{{ suggest_chord }}</td><td><a href="{{ link }}" target="_blank">{{ title }}</a></td><td>{{ position }}</td><</tr>
+      {% endfor %}
+    </table>
+    </div>
+    <h4 class="mt-4 border-bottom">クローリング(何回も押しちゃだめ＞＜)</h4>
+    <div>
+      <input type="submit" name="Crawling" value="Crawling">
+    </div>
+    </form>
+{% endblock content %}
