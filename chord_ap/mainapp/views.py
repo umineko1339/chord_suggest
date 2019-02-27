@@ -9,6 +9,8 @@ import numpy as np
 import copy
 from operator import itemgetter
 
+import pretty_midi
+
 from mainapp.models import Chords
 
 # Create your views here.
@@ -52,7 +54,7 @@ def exec_crawling():
 
     root_address = "https://ja.chordwiki.org"
     
-    for page_num in range(1,5):##ここ改善の必要あり
+    for page_num in range(1,10):##ここ改善の必要あり
 
         html_get = requests.get('https://ja.chordwiki.org/list/'+str(page_num)+'.html')
         soup = BeautifulSoup(html_get.content, "html.parser")
@@ -112,6 +114,16 @@ def chord_standard(chord_main):
 
     chord_chain = ["A","B","C","D","E","F","G"]
     
+    #例外的処理
+    if chord_main=="C♭":
+        return "B"
+    elif chord_main=="B#":
+        return "C"
+    elif chord_main=="F♭":
+        return "E"
+    elif chord_main=="E#":
+        return "F"
+    
     if len(chord_main)==2 and chord_main[1]=="♭":
         chord_index = chord_chain.index(chord_main[0])
         if chord_index!=0:
@@ -130,10 +142,14 @@ def chord_split(chord_string):
     seventh = "-"
     tension_number_list = ["6","9","11","13"]
     tension_var_list = ["-","-","-","-"]
+    
+    ##errorチェック
+    if chord_string=="":
+        return None
 
     ##主調チェック
     main_chord = chord_string[:2]
-    if main_chord[0] not in "ABCDEFG":
+    if main_chord[:1] not in "ABCDEFG":
         return None##Chord ERROR
     else:
         if len(main_chord)==2:
@@ -143,8 +159,8 @@ def chord_split(chord_string):
             else:
                 main_chord = chord_string[0]#
                 chord_string = chord_string[1:]
-        else:
-            main_chord = chord_string[0]#
+        elif len(main_chord)==1:
+            main_chord = chord_string[:1]#
             chord_string = chord_string[1:]
 
     if len(chord_string)==0:
@@ -253,7 +269,21 @@ def chord_transpose(chord_main,transpose_param):
     
     return chord_chain[(chord_index+transpose_param)%12]
     
-def eval_chords_coincidence(chord_vecA,chord_vecB):
+def chord_list_transpose(chord_list,transpose_param):
+    
+    chord_list_transposed = copy.deepcopy(chord_list)
+    
+    for i in range(len(chord_list_transposed)):
+    
+        chord_list_transposed[i][0] = chord_transpose(chord_list_transposed[i][0],transpose_param)
+        
+    return chord_list_transposed
+    
+def eval_chords_coincidence(chord_vecA_get,chord_vecB_get):
+        
+    #copy list
+    chord_vecA = copy.deepcopy(chord_vecA_get)
+    chord_vecB = copy.deepcopy(chord_vecB_get)
 
     #check length
     if len(chord_vecA)!=len(chord_vecB) or len(chord_vecA)==0:
@@ -325,10 +355,20 @@ def translate_chordvec_to_string(chord_vec_list_get):
     
 def rank_search_chord(doc_chord_list,search_chord,boarder_value):
 
+    ##空白の場合は検索しない
     search_len = len(search_chord)
     if search_len==0:
         return None
-    
+        
+    ##転調検索用のリスト準備
+    transpose_list = []
+    for transpose_num in range(12):
+        search_chord_transposed = chord_list_transpose(search_chord,transpose_num)
+        transpose_list.append([search_chord_transposed,transpose_num])
+        
+    print(transpose_list)
+
+    print("debug1")
     ranking_chord_list = []
     for current_doc_chord_info in doc_chord_list:
         doc_chord = current_doc_chord_info[0]
@@ -336,39 +376,76 @@ def rank_search_chord(doc_chord_list,search_chord,boarder_value):
         doc_subtitle = current_doc_chord_info[2]
         doc_link = current_doc_chord_info[3]
         
-        for i in range(len(doc_chord)-search_len+1):
-            evaluation_value = eval_chords_coincidence(copy.deepcopy(doc_chord[i:i+search_len]),copy.deepcopy(search_chord))
+        ##transpose for loop
+        for transpose_num in range(len(transpose_list)):
+        
+            search_chord = transpose_list[transpose_num][0]
+            transpose_ref = transpose_list[transpose_num][1]
+        
+            for i in range(len(doc_chord)-search_len+1):
+                evaluation_value = eval_chords_coincidence(copy.deepcopy(doc_chord[i:i+search_len]),search_chord)
+                
+                if (evaluation_value!=None and evaluation_value!=-1) and evaluation_value<=boarder_value:
+                    #1:match chord
+                    match_chord = translate_chordvec_to_string(chord_list_transpose(doc_chord[i:i+search_len],(-1)*transpose_ref))
+                    #2:suggest chord
+                    suggest_chord = translate_chordvec_to_string(chord_list_transpose(doc_chord[i+search_len:i+search_len+5],(-1)*transpose_ref))
+                    #3:eval value
+                    #4:title
+                    #5:sub title
+                    #6:link
+                    #7:position
+                    #8:transpose
+                    ranking_chord_list.append([match_chord,suggest_chord,evaluation_value,doc_title,doc_subtitle,doc_link,str(i+1),"+"+str(transpose_ref)])
             
-            if (evaluation_value!=None and evaluation_value!=-1) and evaluation_value<=boarder_value:
-                #1:match chord
-                #2:suggest chord
-                #3:eval value
-                #4:title
-                #5:sub title
-                #6:link
-                #7:position
-                ranking_chord_list.append([translate_chordvec_to_string(doc_chord[i:i+search_len]),translate_chordvec_to_string(doc_chord[i+search_len:i+search_len+5]),evaluation_value,doc_title,doc_subtitle,doc_link,str(i+1)])
+    print("debug")
+    print(len(ranking_chord_list))
             
     ranking_chord_list.sort(key=itemgetter(2))
+    
+    if len(ranking_chord_list)==0:
+        return ranking_chord_list
+    
+    for i in range(len(ranking_chord_list)):
+    
+        if i==0:
+            #initialize
+            ranking_chord_result = np.array([ranking_chord_list[0]])
+            continue
+            
+        if ranking_chord_list[i][1] not in ranking_chord_result[:,1]:
+            ranking_chord_result = np.append(ranking_chord_result, np.array([ranking_chord_list[i]]), axis=0)
         
-    return ranking_chord_list
+    return ranking_chord_result
 
 def suggested_chord(input_chord):
+
+    #
+    if input_chord=="":
+        return []
 
     chord_set_all = Chords.objects.all()
     
     ##prepare for input list
+    """chord_doc_vec_list = []
+    for i in chord_set_all:
+        if i.chords!="":
+            chord_doc_vec_list.append([translate_string_to_chordvec(i.chords.split(",")),i.title,i.subtitle,i.link])
+        else:
+            print("error("+i.title+") in suggested_chord")"""
+    
     chord_doc_vec_list = []
     for i in chord_set_all:
-        chord_doc_vec_list.append([translate_string_to_chordvec(i.chords.split(",")),i.title,i.subtitle,i.link])
-    
+        if i.chords!="":
+            current_chordvec = translate_string_to_chordvec(i.chords.split(","))
+            chord_doc_vec_list.append([current_chordvec,i.title,i.subtitle,i.link])
+        else:
+            print("error("+i.title+") in suggested_chord")
+            
     ##search
-    if input_chord!="":
-        ranking_chord_list = rank_search_chord(chord_doc_vec_list,translate_string_to_chordvec(input_chord.split(",")),100000)
-    else:
-        ranking_chord_list = []
+    ranking_chord_list = rank_search_chord(chord_doc_vec_list,translate_string_to_chordvec(input_chord.split(",")),100000)
 
-    return ranking_chord_list[:10]
+    return ranking_chord_list[:50]
 
 ###main###
 

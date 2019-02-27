@@ -3,10 +3,18 @@
 {% block title %}Chord_wiki{% endblock title %}
 
 {% block content %}
+    <h3>コード進行おすすめアプリ</h3>
+    <div>
+    <h4>Instruction</h4>
+    作曲しててコード進行の続きが思いつかない。。。そんなときのためのアプリです。<br>
+    好きなコード進行を入力すると、<a href="https://ja.chordwiki.org/" target="_blank">Chordwiki</a>に投稿されたコード進行の中から、
+    入力した進行に続いて使われているコード進行を、類似度順にランキング提示してくれます。<br>
+    現在開発途中です。とりあえずひととおりは動きます。
+    </div>
     <h4 class="mt-4 border-bottom">コード入力</h4>
     <form action="" method="get">
     <div>ここにコードを入力してね！！
-      <input type="text" placeholder="(ex.)CM7,D,Gm" value="" name="chord"><button type="submit">enter</button>
+      <input type="text" placeholder="(ex.)CM7,D,Gm" value="{{input_chord}}" name="chord"><button type="submit">enter</button>
     </div>
     <div>
       input code: {{input_chord}}
@@ -14,9 +22,9 @@
     <div>
     suggested code: 
     <table>
-      <tr><th>match_chord</th><th>suggest_chord</th><th>title</th><th>position</th></tr>
-      {% for match_chord, suggest_chord, eval_value, title, sub_title, link, position in output_chord %}
-      <tr><td>{{ match_chord }}</td><td>{{ suggest_chord }}</td><td><a href="{{ link }}" target="_blank">{{ title }}</a></td><td>{{ position }}</td><</tr>
+      <tr><th>match_chord</th><th>suggest_chord</th><th>title</th><th>position</th><th>transpose</th></tr>
+      {% for match_chord, suggest_chord, eval_value, title, sub_title, link, position, transpose in output_chord %}
+      <tr><td>{{ match_chord }}</td><td>{{ suggest_chord }}</td><td><a href="{{ link }}" target="_blank">{{ title }}</a></td><td>{{ position }}</td><td>{{ transpose }}</td><</tr>
       {% endfor %}
     </table>
     </div>
