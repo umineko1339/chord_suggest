@@ -7,9 +7,8 @@ import re
 
 import numpy as np
 import copy
+import time
 from operator import itemgetter
-
-import pretty_midi
 
 from mainapp.models import Chords
 
@@ -279,25 +278,31 @@ def chord_list_transpose(chord_list,transpose_param):
         
     return chord_list_transposed
     
-def eval_chords_coincidence(chord_vecA_get,chord_vecB_get):
-        
-    #copy list
-    chord_vecA = copy.deepcopy(chord_vecA_get)
-    chord_vecB = copy.deepcopy(chord_vecB_get)
+def eval_chords_coincidence(chord_vecA,chord_vecB):
+
+    #easy check
+    if chord_vecA[0][1]==chord_vecB[0][1]:
+        if chord_vecA[0][0]!=chord_vecB[0][0]:
+            return None#None?-1ではなくて?lengthチェックしないといけないから...微妙に統一できていない..
 
     #check length
     if len(chord_vecA)!=len(chord_vecB) or len(chord_vecA)==0:
         return None
-        
-    #check dim(ex.Ddimは,C#調の特徴が強いため、C#にして調一致を計算するため、便宜上-1変換を行う.)
-    for i in range(len(chord_vecA)):
-        if chord_vecA[i][1]=="dim":
-            chord_vecA[i][0] = chord_transpose(chord_vecA[i][0],-1)
-        if chord_vecB[i][1]=="dim":
-            chord_vecB[i][0] = chord_transpose(chord_vecB[i][0],-1)
+    
     #check 主調
     for i in range(len(chord_vecA)):
-        if chord_vecA[i][0]!=chord_vecB[i][0]:
+        #check dim(ex.Ddimは,C#調の特徴が強いため、C#にして調一致を計算するため、便宜上-1変換を行う.)
+        if chord_vecA[i][1]=="dim":
+            chord_vecA_main = chord_transpose(chord_vecA[i][0],-1)
+        else:
+            chord_vecA_main = chord_vecA[i][0]
+        if chord_vecB[i][1]=="dim":
+            chord_vecB_main = chord_transpose(chord_vecB[i][0],-1)
+        else:
+            chord_vecB_main = chord_vecB[i][0]
+            
+        #ここでcheck 主調
+        if chord_vecA_main!=chord_vecB_main:
             return -1
             
     #各コードの距離を計算-平均
@@ -308,14 +313,27 @@ def eval_chords_coincidence(chord_vecA_get,chord_vecB_get):
         #調合チェック
         if current_chordA[1]==current_chordB[1]:
             chord_distance += 0
-        elif current_chordA[1] in "m-" and current_chordB[1] in "m-":
+        elif (current_chordA[1]=="m" and current_chordB[1]=="-") or (current_chordA[1] in "-" and current_chordB[1]=="m"):
             chord_distance += 0.3
         elif (current_chordA[1]=="sus4" and current_chordB[1]=="sus2") or (current_chordA[1]=="sus2" and current_chordB[1]=="sus4"):
             chord_distance += 0.3
         else:
-            name_index_list = ["-","m","aug","dim","sus4","sus2"]
+            for current_chordX in [current_chordA,current_chordB]:
+                if current_chordX[1]=="-":
+                    chord_distance += 0
+                elif current_chordX[1]=="m":
+                    chord_distance += 0.2
+                elif current_chordX[1]=="aug":
+                    chord_distance += 0.6
+                elif current_chordX[1]=="dim":
+                    chord_distance += 0.6
+                elif current_chordX[1]=="sus4":
+                    chord_distance += 0.2
+                elif current_chordX[1]=="sus2":
+                    chord_distance += 0.2
+            """name_index_list = ["-","m","aug","dim","sus4","sus2"]
             distance_list = [0,0.2,0.6,0.6,0.2,0.2]
-            chord_distance += (distance_list[name_index_list.index(current_chordA[1])] + distance_list[name_index_list.index(current_chordB[1])])
+            chord_distance += (distance_list[name_index_list.index(current_chordA[1])] + distance_list[name_index_list.index(current_chordB[1])])"""
         #セブンスチェック
         if current_chordA[3]!=current_chordB[3]:
             chord_distance += 0.1
@@ -353,7 +371,7 @@ def translate_chordvec_to_string(chord_vec_list_get):
         
     return ",".join(chord_string_list)
     
-def rank_search_chord(doc_chord_list,search_chord,boarder_value):
+def rank_search_chord(doc_chord_list,search_chord,boarder_value,param_dict):
 
     ##空白の場合は検索しない
     search_len = len(search_chord)
@@ -361,14 +379,16 @@ def rank_search_chord(doc_chord_list,search_chord,boarder_value):
         return None
         
     ##転調検索用のリスト準備
+    print(param_dict["transpose"])
+    if param_dict["transpose"]!=None:
+        transpose_param = 12
+    else:
+        transpose_param = 1
     transpose_list = []
-    for transpose_num in range(12):
+    for transpose_num in range(transpose_param):
         search_chord_transposed = chord_list_transpose(search_chord,transpose_num)
         transpose_list.append([search_chord_transposed,transpose_num])
         
-    print(transpose_list)
-
-    print("debug1")
     ranking_chord_list = []
     for current_doc_chord_info in doc_chord_list:
         doc_chord = current_doc_chord_info[0]
@@ -383,13 +403,24 @@ def rank_search_chord(doc_chord_list,search_chord,boarder_value):
             transpose_ref = transpose_list[transpose_num][1]
         
             for i in range(len(doc_chord)-search_len+1):
-                evaluation_value = eval_chords_coincidence(copy.deepcopy(doc_chord[i:i+search_len]),search_chord)
                 
+                if param_dict["coincident"]==None:
+                    #完全一致でなくてもよい
+                    evaluation_value = eval_chords_coincidence(doc_chord[i:i+search_len],search_chord)
+                else:
+                    #完全一致に限る
+                    if doc_chord[i:i+search_len]==search_chord:
+                        evaluation_value = 0
+                    else:
+                        evaluation_value = -1
+                    
                 if (evaluation_value!=None and evaluation_value!=-1) and evaluation_value<=boarder_value:
                     #1:match chord
                     match_chord = translate_chordvec_to_string(chord_list_transpose(doc_chord[i:i+search_len],(-1)*transpose_ref))
                     #2:suggest chord
                     suggest_chord = translate_chordvec_to_string(chord_list_transpose(doc_chord[i+search_len:i+search_len+5],(-1)*transpose_ref))
+                    if suggest_chord=="":
+                        continue
                     #3:eval value
                     #4:title
                     #5:sub title
@@ -397,9 +428,6 @@ def rank_search_chord(doc_chord_list,search_chord,boarder_value):
                     #7:position
                     #8:transpose
                     ranking_chord_list.append([match_chord,suggest_chord,evaluation_value,doc_title,doc_subtitle,doc_link,str(i+1),"+"+str(transpose_ref)])
-            
-    print("debug")
-    print(len(ranking_chord_list))
             
     ranking_chord_list.sort(key=itemgetter(2))
     
@@ -418,7 +446,7 @@ def rank_search_chord(doc_chord_list,search_chord,boarder_value):
         
     return ranking_chord_result
 
-def suggested_chord(input_chord):
+def suggested_chord(input_chord,param_dict):
 
     #
     if input_chord=="":
@@ -434,6 +462,7 @@ def suggested_chord(input_chord):
         else:
             print("error("+i.title+") in suggested_chord")"""
     
+    start = time.time()
     chord_doc_vec_list = []
     for i in chord_set_all:
         if i.chords!="":
@@ -441,27 +470,56 @@ def suggested_chord(input_chord):
             chord_doc_vec_list.append([current_chordvec,i.title,i.subtitle,i.link])
         else:
             print("error("+i.title+") in suggested_chord")
+    e_time = time.time() - start
+    print("translate:"+str(e_time))
             
     ##search
-    ranking_chord_list = rank_search_chord(chord_doc_vec_list,translate_string_to_chordvec(input_chord.split(",")),100000)
+    start = time.time()
+    ranking_chord_list = rank_search_chord(chord_doc_vec_list,translate_string_to_chordvec(input_chord.split(",")),100000,param_dict)
+    e_time = time.time() - start
+    print("search:"+str(e_time))
 
-    return ranking_chord_list[:50]
+    if len(ranking_chord_list)==0:
+        return None
+    else:
+        if param_dict["display_number"]==None:
+            return ranking_chord_list[:30]
+        else:
+            return ranking_chord_list[:param_dict["display_number"]]
 
 ###main###
 
 def perse_get_query_params(req):
 
     ##return get query
+    query_dict = {}
     if "chord" in req.GET:
-        chord = req.GET.get("chord")
+        query_dict["chord"] = req.GET.get("chord")
     else:
-        chord = None
+        query_dict["chord"] = ""
     if "Crawling" in req.GET:
-        crawling = req.GET.get("Crawling")
+        query_dict["crawling"] = req.GET.get("Crawling")
     else:
-        crawling = None
+        query_dict["crawling"] = None
+    if "transpose" in req.GET:
+        query_dict["transpose"] = req.GET.get("transpose")
+    else:
+        query_dict["transpose"] = None
+    if "coincident" in req.GET:
+        query_dict["coincident"] = req.GET.get("coincident")
+    else:
+        query_dict["coincident"] = None
+    if "display_number" in req.GET:
+        query_dict["display_number"] = req.GET.get("display_number")
+        if query_dict["display_number"]=="":
+            query_dict["display_number"] = None
+        else:
+            query_dict["display_number"] = int(query_dict["display_number"])
+    else:
+        query_dict["display_number"] = None
 
-    return chord, crawling
+
+    return query_dict
     
 
 class main_page(ListView):
@@ -473,10 +531,27 @@ class main_page(ListView):
 
     def get_context_data(self, **kwargs):
         context = super().get_context_data(**kwargs)
-        context["input_chord"], crawling_check = perse_get_query_params(self.request)
-        if crawling_check!=None:
+        
+        #get query
+        query_dict = perse_get_query_params(self.request)
+        #chord check
+        context["input_chord"] = query_dict["chord"]
+        if query_dict["chord"]!=None:
+            input_chord_vec = translate_string_to_chordvec(query_dict["chord"].split(","))
+            input_chord_length = len(input_chord_vec)
+            if input_chord_length<3:
+                context["used_input_chord"] = translate_chordvec_to_string(input_chord_vec)+"(3コード以上入力してください)"
+            else:
+                context["used_input_chord"] = translate_chordvec_to_string(input_chord_vec)
+        else:
+            context["used_input_chord"] = ""+"(3コード以上入力してください)"
+        context["transpose"] = query_dict["transpose"]
+        context["coincident"] = query_dict["coincident"]
+        context["display_number"] = query_dict["display_number"]
+        
+        if query_dict["crawling"]!=None:
             exec_crawling()
-        if context["input_chord"]!=None:
-            context["output_chord"] = suggested_chord(context["input_chord"])
+        if context["input_chord"]!=None and input_chord_length>=3:
+            context["output_chord"] = suggested_chord(context["input_chord"],query_dict)
             
         return context

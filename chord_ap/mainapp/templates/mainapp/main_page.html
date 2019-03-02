@@ -8,19 +8,49 @@
     <h4>Instruction</h4>
     作曲しててコード進行の続きが思いつかない。。。そんなときのためのアプリです。<br>
     好きなコード進行を入力すると、<a href="https://ja.chordwiki.org/" target="_blank">Chordwiki</a>に投稿されたコード進行の中から、
-    入力した進行に続いて使われているコード進行を、類似度順にランキング提示してくれます。<br>
+    入力した進行に続いて使われているコード進行を、類似度順に表示してくれます。<br>
     現在開発途中です。とりあえずひととおりは動きます。
     </div>
+    
+    <!-- 折り畳み展開ポインタ -->
+    <div onclick="obj=document.getElementById('open').style; obj.display=(obj.display=='none')?'block':'none';">
+    <a style="cursor:pointer;"><font size="2">▼ コード表記の説明(click)</font></a>
+    </div>
+    <!--// 折り畳み展開ポインタ -->
+     
+    <!-- 折り畳まれ部分 -->
+    <div id="open" style="display:none;clear:both;">
+
+    <font size="2">
+    以下、Cコードを例に説明。<br>    コードの種類は、メジャーコード(C)、マイナーコード(Cm)、ディミニッシュ(Cdim)、オーギュメント(Caug)、サス4(Csus4)、サス2(Csus2)が使用可能。<br>
+    テンション(セブンス系)は、7、M7に対応。<br>
+    テンション(その他)は、6th,9th,11th,13thに対応。表記は、6 or (6) or add6で。<br>
+    ベースは /G のように表記可能。<br>
+    表記の順番は、(コード種)(セブンス系テンション)(その他テンション)(ベース)。<br>
+    [例]C#mM7(6)add13/G♭
+    </font>
+
+    </div>
+    <!--// 折り畳まれ部分 -->
+    
     <h4 class="mt-4 border-bottom">コード入力</h4>
     <form action="" method="get">
-    <div>ここにコードを入力してね！！
+    <div>ここにコードを入力してね！！(3コード以上)
       <input type="text" placeholder="(ex.)CM7,D,Gm" value="{{input_chord}}" name="chord"><button type="submit">enter</button>
     </div>
+    <div>検索条件設定:
+        <input type="checkbox" name="transpose" value="True" {% ifequal transpose 'True' %}checked="checked"{% endifequal %}>転調あり
+        <input type="checkbox" name="coincident" value="True" {% ifequal coincident 'True' %}checked="checked"{% endifequal %}>完全一致のみ
+    </div>
+    <div>表示数設定(1~300/defalt:30):
+        <input type="number" placeholder="30" value="{{display_number}}" name="display_number" min=1 max=300>
+    </div>
+    <p>
     <div>
-      input code: {{input_chord}}
+      input code: {{used_input_chord}}
     </div>
     <div>
-    suggested code: 
+    suggested code:
     <table>
       <tr><th>match_chord</th><th>suggest_chord</th><th>title</th><th>position</th><th>transpose</th></tr>
       {% for match_chord, suggest_chord, eval_value, title, sub_title, link, position, transpose in output_chord %}
@@ -28,6 +58,7 @@
       {% endfor %}
     </table>
     </div>
+    </p>
     <h4 class="mt-4 border-bottom">クローリング(何回も押しちゃだめ＞＜)</h4>
     <div>
       <input type="submit" name="Crawling" value="Crawling">
