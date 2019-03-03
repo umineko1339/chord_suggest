@@ -1,14 +1,19 @@
 {% extends "mainapp/base.html" %}
+{% load staticfiles %}
+{% load static %}
+
+{% block extra_script %}<script type="text/javascript" src=“{% static 'mainapp/js/Tone.js' %}"></script>
+<script type="text/javascript" src=“{% static 'js/Tone_extend.js' %}"></script>{% endblock %}
 
 {% block title %}Chord_wiki{% endblock title %}
 
 {% block content %}
     <h3>コード進行おすすめアプリ</h3>
     <div>
-    <h4>Instruction</h4>
+    <h4>Introduction</h4>
     作曲しててコード進行の続きが思いつかない。。。そんなときのためのアプリです。<br>
     好きなコード進行を入力すると、<a href="https://ja.chordwiki.org/" target="_blank">Chordwiki</a>に投稿されたコード進行の中から、
-    入力した進行に続いて使われているコード進行を、類似度順に表示してくれます。<br>
+    入力した進行に続いて使われているコード進行を、類似度順に表示してくれます。<br>全曲検索ではなく、毎回ランダムに選択した曲からコード進行を検索するので、毎回違った検索結果が出ます。<br><br>
     現在開発途中です。とりあえずひととおりは動きます。
     </div>
     
@@ -28,6 +33,7 @@
     ベースは /G のように表記可能。<br>
     表記の順番は、(コード種)(セブンス系テンション)(その他テンション)(ベース)。<br>
     [例]C#mM7(6)add13/G♭
+    <input type="button" value="Test_sound" onclick="test_js();"/>
     </font>
 
     </div>

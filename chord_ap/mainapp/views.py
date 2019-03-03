@@ -8,7 +8,9 @@ import re
 import numpy as np
 import copy
 import time
+from time import sleep
 from operator import itemgetter
+import random
 
 from mainapp.models import Chords
 
@@ -53,7 +55,20 @@ def exec_crawling():
 
     root_address = "https://ja.chordwiki.org"
     
-    for page_num in range(1,10):##ここ改善の必要あり
+    ##page数取得
+    html_get = requests.get('https://ja.chordwiki.org/list/1.html')
+    soup = BeautifulSoup(html_get.content, "html.parser")
+    page_number_info = str(soup.select('div.guide')[0])
+    search_title_number = int(page_number_info[page_number_info.find(">")+1:page_number_info.find("件")])
+    search_page_number = int(search_title_number/20)#一個足りない？
+    print("search-title数:"+str(search_title_number))
+    print("search-page数:"+str(search_page_number))
+        
+    for page_num in range(1,search_page_number+1):
+    
+        ##進捗
+        start_time = time.time()
+        print("進捗:"+str(page_num)+"/"+str(search_page_number)+"page")
 
         html_get = requests.get('https://ja.chordwiki.org/list/'+str(page_num)+'.html')
         soup = BeautifulSoup(html_get.content, "html.parser")
@@ -86,16 +101,50 @@ def exec_crawling():
                 if check_true_chord(chord_string)==True:
                     chord_list.append(chord_string)
                     
-            chord_list = ",".join(chord_list)
+            chord_vec_list = translate_string_to_chordvec(chord_list)##ここでベクトルに変換
+            if len(chord_vec_list)!=0:
+                chord_list_save = translate_chordvec_and_save(chord_vec_list,1)
                     
-            title_name = get_contents_only(title_name[0])
-            subtitle_name = get_contents_only(subtitle_name[0])
-            Chords.objects.create(title=title_name,subtitle=subtitle_name,link=title_link_list[j][1],chords=chord_list)
-            print(title_name)
-            print(subtitle_name)
-            print(chord_list)
-            
+                if len(title_name)!=0:
+                    title_name = get_contents_only(title_name[0])
+                else:
+                    title_name = "(no title)"
+                if len(subtitle_name)!=0:
+                    subtitle_name = get_contents_only(subtitle_name[0])
+                else:
+                    subtitle_name = "(no subtitle)"
+                Chords.objects.create(title=title_name,subtitle=subtitle_name,link=title_link_list[j][1],chords=chord_list_save)
+                print(title_name)
+                print(subtitle_name)
+                #print(chord_list_save)
+                
+        ##アクセス過多対策
+        access_interval = 10#アクセス
+        e_time = time.time() - start_time
+        if e_time<access_interval:
+            sleep(access_interval-e_time)
+    
+    print("complete crawling")
+    
     return
+    
+def translate_chordvec_and_save(chord_vec_list,setting_param):
+
+    if setting_param>=0:
+        ##save用
+        chord_vec_save = ""
+        for one_chord_vec in chord_vec_list:
+            for one_param in one_chord_vec:
+                chord_vec_save += (one_param+",")
+            chord_vec_save = chord_vec_save[:-1]+"/"
+        return chord_vec_save[:-1]
+    else:
+        ##load用
+        chord_vec_load = []
+        chord_vec_list = chord_vec_list.split("/")
+        for one_chord_vec in chord_vec_list:
+            chord_vec_load.append(one_chord_vec.split(","))
+        return chord_vec_load
 
 def translate_string_to_chordvec(chord_string_list):
 
@@ -230,7 +279,7 @@ def chord_split(chord_string):
         for i in range(len(tension_number_list)):
             checked_tension = tension_check(chord_string, tension_number_list[i])
             if checked_tension!=None:
-                tension_var_list[i] = True
+                tension_var_list[i] = "True"
                 chord_string = checked_tension
                 tension_checked_flag = True##テンションありました
                 break
@@ -315,8 +364,6 @@ def eval_chords_coincidence(chord_vecA,chord_vecB):
             chord_distance += 0
         elif (current_chordA[1]=="m" and current_chordB[1]=="-") or (current_chordA[1] in "-" and current_chordB[1]=="m"):
             chord_distance += 0.3
-        elif (current_chordA[1]=="sus4" and current_chordB[1]=="sus2") or (current_chordA[1]=="sus2" and current_chordB[1]=="sus4"):
-            chord_distance += 0.3
         else:
             for current_chordX in [current_chordA,current_chordB]:
                 if current_chordX[1]=="-":
@@ -328,9 +375,9 @@ def eval_chords_coincidence(chord_vecA,chord_vecB):
                 elif current_chordX[1]=="dim":
                     chord_distance += 0.6
                 elif current_chordX[1]=="sus4":
-                    chord_distance += 0.2
+                    chord_distance += 0.17
                 elif current_chordX[1]=="sus2":
-                    chord_distance += 0.2
+                    chord_distance += 0.17
             """name_index_list = ["-","m","aug","dim","sus4","sus2"]
             distance_list = [0,0.2,0.6,0.6,0.2,0.2]
             chord_distance += (distance_list[name_index_list.index(current_chordA[1])] + distance_list[name_index_list.index(current_chordB[1])])"""
@@ -367,6 +414,9 @@ def translate_chordvec_to_string(chord_vec_list_get):
             if chord_vec[i]!="":
                 chord_string += "("+tension_name_list[i]+")"
                 
+        if chord_vec[2]!="":
+            chord_string += "/"+chord_vec[2]
+                
         chord_string_list.append(chord_string)
         
     return ",".join(chord_string_list)
@@ -379,7 +429,6 @@ def rank_search_chord(doc_chord_list,search_chord,boarder_value,param_dict):
         return None
         
     ##転調検索用のリスト準備
-    print(param_dict["transpose"])
     if param_dict["transpose"]!=None:
         transpose_param = 12
     else:
@@ -455,18 +504,15 @@ def suggested_chord(input_chord,param_dict):
     chord_set_all = Chords.objects.all()
     
     ##prepare for input list
-    """chord_doc_vec_list = []
-    for i in chord_set_all:
-        if i.chords!="":
-            chord_doc_vec_list.append([translate_string_to_chordvec(i.chords.split(",")),i.title,i.subtitle,i.link])
-        else:
-            print("error("+i.title+") in suggested_chord")"""
     
     start = time.time()
     chord_doc_vec_list = []
     for i in chord_set_all:
+        ##全検索は計算量大きいので、ランダムで数を絞って検索
+        if random.randint(1,20)!=1:
+            continue
         if i.chords!="":
-            current_chordvec = translate_string_to_chordvec(i.chords.split(","))
+            current_chordvec = translate_chordvec_and_save(i.chords,-1)##load
             chord_doc_vec_list.append([current_chordvec,i.title,i.subtitle,i.link])
         else:
             print("error("+i.title+") in suggested_chord")
@@ -520,7 +566,6 @@ def perse_get_query_params(req):
 
 
     return query_dict
-    
 
 class main_page(ListView):
     template_name = "mainapp/main_page.html"
@@ -550,7 +595,8 @@ class main_page(ListView):
         context["display_number"] = query_dict["display_number"]
         
         if query_dict["crawling"]!=None:
-            exec_crawling()
+            print("skip crawling")
+            #exec_crawling()
         if context["input_chord"]!=None and input_chord_length>=3:
             context["output_chord"] = suggested_chord(context["input_chord"],query_dict)
             
